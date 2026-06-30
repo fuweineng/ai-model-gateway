@@ -1,0 +1,6 @@
+ai-model-gateway
+ai-model-gateway.yaml.bak
+.env
+logs/
+.gopath/
+__debug_bin/

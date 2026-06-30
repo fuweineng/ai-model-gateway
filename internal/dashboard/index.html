@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>AI Model Gateway — 仪表盘</title>
+<style>
+:root{--bg:#0f1115;--card:#171a21;--border:#2a2e38;--text:#eee;--dim:#aaa;--green:#22c55e;--red:#ef4444;--yellow:#eab308;--blue:#3b82f6;--purple:#a855f7}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:var(--bg);color:var(--text);padding:20px;max-width:1200px;margin:0 auto}
+h1{font-size:24px;margin-bottom:4px}
+h2{font-size:18px;margin:24px 0 12px;border-bottom:1px solid var(--border);padding-bottom:8px}
+.sub{color:var(--dim);font-size:13px;margin-bottom:20px}
+.grid{display:grid;gap:16px;grid-template-columns:repeat(auto-fill,minmax(340px,1fr))}
+.card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px}
+.card h3{font-size:15px;margin-bottom:12px;color:var(--blue)}
+.stat{display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border)}
+.stat:last-child{border:none}
+.stat .label{color:var(--dim)}
+.stat .val{font-weight:600}
+.badge{display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600}
+.badge-ok{background:rgba(34,197,94,.15);color:var(--green)}
+.badge-err{background:rgba(239,68,68,.15);color:var(--red)}
+.badge-warn{background:rgba(234,179,8,.15);color:var(--yellow)}
+.badge-free{background:rgba(59,130,246,.15);color:var(--blue)}
+.badge-paid{background:rgba(168,85,247,.15);color:var(--purple)}
+.badge-local{background:rgba(34,197,94,.15);color:var(--green)}
+.badge-off{background:rgba(107,114,128,.15);color:#9ca3af}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{text-align:left;padding:8px;color:var(--dim);border-bottom:1px solid var(--border);font-weight:600}
+td{padding:8px;border-bottom:1px solid var(--border)}
+td.num{text-align:right;font-variant-numeric:tabular-nums}
+.bar{height:4px;border-radius:2px;background:var(--border);overflow:hidden;margin-top:4px}
+.bar-fill{height:100%;background:var(--blue);border-radius:2px}
+.role-tag{display:inline-block;padding:2px 6px;border-radius:4px;font-size:11px;background:rgba(168,85,247,.12);color:var(--purple);margin-right:4px}
+.model-tag{display:inline-block;padding:2px 6px;border-radius:4px;font-size:11px;background:rgba(59,130,246,.1);color:var(--blue);margin:2px}
+.refresh-note{color:var(--dim);font-size:12px;text-align:right;margin-top:16px}
+.error{color:var(--red);font-size:12px}
+.token-hint{background:rgba(239,68,68,.1);border:1px solid var(--red);border-radius:8px;padding:16px;margin:20px 0;color:var(--red);font-size:14px}
+.err-detail td{background:rgba(239,68,68,.05);color:var(--red);font-size:12px}
+.bar-row{display:flex;align-items:center;gap:8px;margin-bottom:4px}
+.bar-label{font-size:12px;width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.bar-track{flex:1;height:16px;border-radius:4px;background:var(--border);overflow:hidden}
+.bar-track-fill{height:100%;background:var(--blue);border-radius:4px;transition:width .3s}
+.bar-count{font-size:12px;width:40px;text-align:right}
+</style>
+</head>
+<body>
+<h1>AI Model Gateway</h1>
+<p class="sub" id="subtitle">加载中...</p>
+
+<div id="token-hint" class="token-hint" style="display:none">
+  🔒 需要认证 token 才能查看数据。请通过
+  <code>http://192.168.100.221:8650/dashboard?token=YOUR_TOKEN</code>
+  访问（YOUR_TOKEN 替换为 GATEWAY_API_TOKEN 的值）。
+</div>
+
+<h2>上游状态</h2>
+<div class="grid" id="upstreams"></div>
+
+<h2>用量统计</h2>
+<div class="card">
+<table id="usage-table">
+<thead><tr><th>日期</th><th>模型</th><th>请求数</th><th>错误数</th><th>平均延迟</th><th>错误率</th></tr></thead>
+<tbody id="usage-body"><tr><td colspan="6" style="color:var(--dim)">加载中...</td></tr></tbody>
+</table>
+</div>
+
+<h2>用量图表（按模型 Top 10）</h2>
+<div class="card">
+<div id="chart-container" style="display:flex;flex-direction:column;gap:6px">
+  <div style="color:var(--dim)">加载中...</div>
+</div>
+</div>
+
+<h2>实时请求流 <span style="font-size:13px;color:var(--dim)">（最近 50 条，点击错误行展开详情）</span></h2>
+<div class="card">
+<table id="requests-table">
+<thead><tr><th>时间</th><th>调用方</th><th>角色</th><th>模型</th><th>上游</th><th>延迟</th><th>状态</th></tr></thead>
+<tbody id="requests-body"><tr><td colspan="7" style="color:var(--dim)">加载中...</td></tr></tbody>
+</table>
+</div>
+
+<h2>角色路由</h2>
+<div class="grid" id="roles"></div>
+
+<h2>模型层级</h2>
+<div class="grid" id="tiers"></div>
+
+<p class="refresh-note">每 5 秒自动刷新 | <a href="/v1/health" style="color:var(--blue)">API</a> | <a href="/dashboard" style="color:var(--blue)">刷新</a></p>
+
+<script>
+// ---- v2: token 管理 ----
+// 从 URL ?token=xxx 获取 token，存入 localStorage；所有 fetch 自动带 Authorization header
+function getToken() {
+  // 1. 优先从 URL 参数获取（支持 /dashboard?token=xxx）
+  const params = new URLSearchParams(window.location.search);
+  const urlToken = params.get('token');
+  if (urlToken) {
+    localStorage.setItem('gateway_token', urlToken);
+    // 清除 URL 中的 token 参数（避免泄露到浏览器历史/日志）
+    const cleanUrl = window.location.pathname;
+    window.history.replaceState({}, document.title, cleanUrl);
+    return urlToken;
+  }
+  // 2. 从 localStorage 读取
+  return localStorage.getItem('gateway_token') || '';
+}
+
+const GATEWAY_TOKEN = getToken();
+
+// ---- v2: fetch 封装——自动带 Authorization header ----
+async function fetchJSON(url) {
+  try {
+    const headers = {};
+    if (GATEWAY_TOKEN) {
+      headers['Authorization'] = 'Bearer ' + GATEWAY_TOKEN;
+    }
+    const r = await fetch(url, { headers });
+    if (r.status === 401) {
+      // token 无效或缺失——显示提示
+      document.getElementById('token-hint').style.display = 'block';
+      return null;
+    }
+    if (!r.ok) throw new Error(r.status);
+    return await r.json();
+  } catch(e) {
+    console.error('fetch error', url, e);
+    return null;
+  }
+}
+
+function escapeHtml(s) {
+  const d = document.createElement('div');
+  d.textContent = s || '';
+  return d.innerHTML;
+}
+
+function toggleErr(row) {
+  const next = row.nextElementSibling;
+  if (next && next.classList.contains('err-detail')) {
+    next.style.display = next.style.display === 'none' ? '' : 'none';
+  }
+}
+
+function fmtMs(ms) { return ms > 0 ? ms + 'ms' : '-'; }
+function fmtUptime(s) {
+  if (s < 60) return s + 's';
+  if (s < 3600) return Math.floor(s/60) + 'm ' + (s%60) + 's';
+  return Math.floor(s/3600) + 'h ' + Math.floor((s%3600)/60) + 'm';
+}
+function typeBadge(type) {
+  const map = {free:'badge-free',paid:'badge-paid',local:'badge-local'};
+  const labels = {free:'免费',paid:'订阅',local:'本地'};
+  return '<span class="badge ' + (map[type]||'badge-off') + '">' + (labels[type]||type) + '</span>';
+}
+function healthBadge(h) {
+  if (h.healthy === true) return '<span class="badge badge-ok">✅ 健康</span>';
+  if (h.healthy === false) return '<span class="badge badge-err">❌ 异常</span>';
+  return '<span class="badge badge-off">未知</span>';
+}
+
+async function updateDashboard() {
+  // Health
+  const health = await fetchJSON('/v1/health');
+  if (!health) {
+    document.getElementById('subtitle').textContent = '无法连接网关或认证失败';
+    return;
+  }
+
+  // v2: /v1/health 不再返回 config_file，去掉该字段引用
+  document.getElementById('subtitle').innerHTML =
+    '运行时间: ' + fmtUptime(health.uptime_seconds) +
+    ' | <a href="/v1/usage" style="color:var(--blue)">用量API</a>' +
+    ' | <a href="/v1/requests" style="color:var(--blue)">请求流API</a>';
+
+  // Upstreams
+  const ups = health.upstreams || {};
+  let upHtml = '';
+  for (const [name, info] of Object.entries(ups)) {
+    const cfg = (window._upstreamCfg||{})[name] || {};
+    const models = (cfg.models||[]).length || 0;
+    const errTxt = info.error ? '<div class="error">' + escapeHtml(info.error.substring(0,60)) + '</div>' : '';
+    upHtml += '<div class="card"><h3>' + escapeHtml(cfg.label||name) + ' ' + typeBadge(cfg.type||'') + '</h3>' +
+      '<div class="stat"><span class="label">状态</span><span>' + healthBadge(info) + '</span></div>' +
+      '<div class="stat"><span class="label">延迟</span><span class="val">' + fmtMs(info.latency_ms) + '</span></div>' +
+      '<div class="stat"><span class="label">模型数</span><span class="val">' + models + '</span></div>' +
+      '<div class="stat"><span class="label">端点</span><span style="font-size:11px;color:var(--dim)">' + escapeHtml(cfg.base_url||'') + '</span></div>' +
+      errTxt + '</div>';
+  }
+  document.getElementById('upstreams').innerHTML = upHtml;
+
+  // Usage table
+  const usage = await fetchJSON('/v1/usage');
+  if (usage) {
+    let rows = '';
+    const sorted = Object.entries(usage).sort((a,b) => {
+      const [da,ma] = a[0].split(':'); const [db,mb] = b[0].split(':');
+      return db > da ? 1 : db < da ? -1 : ma.localeCompare(mb);
+    });
+    for (const [key, val] of sorted) {
+      const [date, model] = key.split(':');
+      const errRate = val.count > 0 ? (val.errors/val.count*100).toFixed(1) + '%' : '-';
+      const avgLat = val.count > 0 ? Math.round(val.total_latency_ms/val.count) + 'ms' : '-';
+      const errColor = val.errors > 0 ? 'color:var(--red)' : '';
+      rows += '<tr><td>' + escapeHtml(date) + '</td><td>' + escapeHtml(model) + '</td><td class="num">' + val.count + '</td>' +
+        '<td class="num" style="' + errColor + '">' + val.errors + '</td><td class="num">' + avgLat + '</td>' +
+        '<td class="num" style="' + errColor + '">' + errRate + '</td></tr>';
+    }
+    document.getElementById('usage-body').innerHTML = rows || '<tr><td colspan="6" style="color:var(--dim)">暂无用量数据</td></tr>';
+
+    // v2: 用量图表——按模型汇总 bar chart（Top 10）
+    const modelTotals = {};
+    for (const [key, val] of Object.entries(usage)) {
+      const model = key.split(':').slice(1).join(':') || key;
+      modelTotals[model] = (modelTotals[model]||0) + val.count;
+    }
+    const sortedModels = Object.entries(modelTotals).sort((a,b) => b[1]-a[1]).slice(0, 10);
+    const maxCount = sortedModels.length > 0 ? sortedModels[0][1] : 1;
+    let chartHtml = '';
+    for (const [model, count] of sortedModels) {
+      const pct = Math.round(count / maxCount * 100);
+      chartHtml += '<div class="bar-row">' +
+        '<span class="bar-label" title="' + escapeHtml(model) + '">' + escapeHtml(model) + '</span>' +
+        '<div class="bar-track"><div class="bar-track-fill" style="width:' + pct + '%"></div></div>' +
+        '<span class="bar-count">' + count + '</span></div>';
+    }
+    document.getElementById('chart-container').innerHTML = chartHtml || '<div style="color:var(--dim)">暂无数据</div>';
+  }
+
+  // v2: 实时请求流——从 /v1/requests 拉取最近 50 条
+  const requests = await fetchJSON('/v1/requests');
+  if (requests && Array.isArray(requests)) {
+    let reqHtml = '';
+    const sorted = [...requests].reverse(); // 最新在最前面
+    for (const r of sorted) {
+      const time = r.time ? r.time.substring(11, 19) : '-';
+      const statusColor = r.status >= 500 ? 'color:var(--red)' : r.status >= 400 ? 'color:var(--red)' : r.status >= 300 ? 'color:var(--yellow)' : 'color:var(--green)';
+      const hasErr = r.error && r.error.length > 0;
+      const rowStyle = hasErr ? ' style="cursor:pointer" onclick="toggleErr(this)"' : '';
+      const errRow = hasErr ? '<tr class="err-detail" style="display:none"><td colspan="7">' + escapeHtml(r.error) + '</td></tr>' : '';
+      const rowBg = hasErr ? 'background:rgba(239,68,68,.05);' : '';
+      reqHtml += '<tr' + rowStyle + ' style="' + rowBg + '"><td>' + time + '</td><td>' + escapeHtml(r.client_ip||'-') + '</td>' +
+        '<td><span class="role-tag">' + escapeHtml(r.role||'-') + '</span></td>' +
+        '<td><span class="model-tag">' + escapeHtml(r.model||'-') + '</span></td>' +
+        '<td>' + escapeHtml(r.upstream||'-') + '</td>' +
+        '<td class="num">' + (r.latency_ms||0) + 'ms</td>' +
+        '<td class="num" style="' + statusColor + '">' + (r.status||'-') + '</td></tr>' + errRow;
+    }
+    document.getElementById('requests-body').innerHTML = reqHtml || '<tr><td colspan="7" style="color:var(--dim)">暂无请求</td></tr>';
+  }
+
+  // Roles (from models endpoint - parse role models)
+  const modelsResp = await fetchJSON('/v1/models');
+  if (modelsResp) {
+    const roleModels = modelsResp.data.filter(m => m.owned_by === 'gateway');
+    let roleHtml = '';
+    for (const rm of roleModels) {
+      roleHtml += '<div class="card"><h3>' + escapeHtml(rm.id) + '</h3>' +
+        '<div class="stat"><span class="label">路由</span><span class="val">' + escapeHtml(rm.description||'') + '</span></div></div>';
+    }
+    document.getElementById('roles').innerHTML = roleHtml;
+  }
+}
+
+// First load config from the models response to get upstream details
+async function loadConfig() {
+  // We can't directly read YAML from browser, but we can infer from models endpoint
+  const modelsResp = await fetchJSON('/v1/models');
+  if (modelsResp) {
+    const cfg = {};
+    for (const m of modelsResp.data) {
+      if (m.owned_by && m.owned_by !== 'gateway') {
+        if (!cfg[m.owned_by]) cfg[m.owned_by] = {models: []};
+        cfg[m.owned_by].models.push(m.id);
+      }
+    }
+    window._upstreamCfg = cfg;
+  }
+}
+
+async function init() {
+  // v2: 无 token 时显示提示，但仍尝试加载（localhost 免认证时数据可正常获取）
+  if (!GATEWAY_TOKEN) {
+    // 检查是否 localhost 访问（可能免认证）
+    const isLocal = location.hostname === '127.0.0.1' || location.hostname === 'localhost' || location.hostname === '::1';
+    if (!isLocal) {
+      document.getElementById('token-hint').style.display = 'block';
+    }
+  }
+  await loadConfig();
+  await updateDashboard();
+  setInterval(updateDashboard, 5000);
+}
+init();
+</script>
+</body>
+</html>

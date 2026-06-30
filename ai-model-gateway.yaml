@@ -1,0 +1,438 @@
+# AI Model Gateway 配置 v3
+# ============================================================
+# 统一入口：整合 Hermes + OpenCode + OpenClaw 所有 AI 资源
+# 所有 agent 走 :8650，不用各自维护 API key 和路由
+# ============================================================
+# 最后更新: 2026-06-27
+
+listen:
+  host: 0.0.0.0
+  port: 8650
+
+# 安全配置
+security:
+  api_token_env: GATEWAY_API_TOKEN
+  env_file: /app/.env
+  public_paths:
+    - /dashboard
+    - /dashboard/
+    - /v1/health
+    - /v1/requests
+  allow_localhost_no_auth: false
+  max_consecutive_fails: 3
+  cors_origins:
+    - "*"
+  trust_cloudflare: true
+  rate_limit:
+    max_per_minute: 60
+    max_concurrent: 16
+
+# ───────────────────────────────────────────────────
+# 上游 API 端点（整合自三方）
+# ───────────────────────────────────────────────────
+upstreams:
+
+  # ══════════════════════════════════════════════
+  # Hermes 来源
+  # ══════════════════════════════════════════════
+
+  # ── opencode-go（免费，主力）──
+  # 优先路由到 opencode-go（免费），失败后降级到 deepseek-official（预付费）
+  opencode-go:
+    label: "OpenCode Go (免费)"
+    type: free
+    base_url: https://opencode.ai/zen/go/v1
+    api_key_env: OPENCODE_GO_API_KEY
+    env_file: /app/.env
+    timeout: 30
+    models:
+      - deepseek-v4-flash
+      - deepseek-v4-pro
+      - kimi-k2.5
+      - glm-5
+      - glm-5.2
+      - minimax-m2.5
+      - qwen3-plus
+      - qwen3-coder-30b
+      - deepseek-v3.1-0324
+      - deepseek-r1-0528
+      - deepseek-v4-0324
+      - deepseek-v3.2-0506
+    extra_models:
+      - qwen3.7-max             # ← OpenClaw 有但旧版缺失
+      - qwen3.7-plus            # ← OpenClaw 有
+      - qwen3.6-plus            # ← OpenClaw 有
+      - mimo-v2.5-pro           # ← OpenClaw 有
+      - mimo-v2.5               # ← OpenClaw 有
+      - glm-5.1                 # ← OpenClaw 有
+      - kimi-k2.7-code          # ← OpenClaw 有
+      - kimi-k2.6               # ← OpenClaw 有
+
+  # ── opencode-zen（免费，低风险任务）──
+  opencode-zen:
+    label: "OpenCode Zen (免费)"
+    type: free
+    base_url: https://opencode.ai/zen/v1
+    api_key_env: OPENCODE_ZEN_API_KEY
+    env_file: /app/.env
+    timeout: 30
+    models:
+      - deepseek-v4-flash-free
+      - qwen3.6-plus-free
+      - mimo-v2.5-free
+      - minimax-m3-free
+      - nemotron-3-ultra-free
+      - north-mini-code-free
+
+  # ── opencode-zen-full（订阅，claude/gpt/gemini）──
+  opencode-zen-full:
+    label: "OpenCode Zen (订阅)"
+    type: paid
+    base_url: https://opencode.ai/zen/v1
+    api_key_env: OPENCODE_ZEN_API_KEY
+    env_file: /app/.env
+    timeout: 30
+    models:
+      - claude-sonnet-4
+      - claude-sonnet-4-5
+      - claude-opus-4-1
+      - gpt-5
+      - gpt-5.1
+      - gemini-3-flash
+      - gemini-3.1-pro
+
+  # ── NVIDIA NIM（免费，中国手机号验证即可，无限调用）──
+  nvidia-nim:
+    label: "NVIDIA NIM (免费)"
+    type: free
+    base_url: https://integrate.api.nvidia.com/v1
+    api_key_env: NVIDIA_API_KEY
+    env_file: /app/.env
+    timeout: 120
+    max_retries: 2
+    retry_delay: 2
+    models:
+      - minimaxai/minimax-m3
+      - nvidia/nemotron-3-ultra-550b-a55b
+
+  # ── LongCat 龙猫（美团出品，每日 500 万+ tokens 免费）──
+  longcat:
+    label: "LongCat 龙猫 (免费)"
+    type: free
+    base_url: https://api.longcat.chat/openai
+    api_key_env: LONGCAT_API_KEY
+    env_file: /app/.env
+    timeout: 90
+    models:
+      - LongCat-2.0
+
+  # ══════════════════════════════════════════════
+  # OpenClaw 来源
+  # ══════════════════════════════════════════════
+
+  # ── DeepSeek 官方 API（预付费）──
+  deepseek-official:
+    label: "DeepSeek Official (预付费)"
+    type: paid
+    base_url: https://api.deepseek.com/v1
+    api_key_env: DEEPSEEK_API_KEY
+    env_file: /app/.env
+    timeout: 30
+    models:
+      - deepseek-v4-flash
+      - deepseek-v4-pro
+
+  # ── 火山引擎（订阅 volcengine-plan）──
+  # OpenClaw 完整模型列表
+  volcengine:
+    label: "火山引擎 (订阅)"
+    type: paid
+    base_url: https://ark.cn-beijing.volces.com/api/coding/v3
+    api_key_env: VOLC_API_KEY
+    env_file: /app/.env
+    timeout: 30
+    models:
+      - ark-code-latest          # OpenClaw primary
+      - doubao-seed-2.0-lite    # ← OpenClaw 有但旧版缺失
+      - doubao-seed-2.0-mini    # ← 同上
+      - doubao-seed-2.0-pro     # ← 同上
+      - doubao-seed-2.0-code    # ← 同上
+      - glm-5.2                 # 兼容
+      - deepseek-v4-flash       # 兼容
+      - deepseek-v4-pro         # 兼容
+      - minimax-m3              # ← OpenClaw 有
+      - minimax-m2.7            # ← OpenClaw 有
+      - kimi-k2.6               # ← OpenClaw 有
+      - kimi-k2.7-code          # ← OpenClaw 有
+
+
+
+  # ══════════════════════════════════════════════
+  # 本地/局域网资源
+  # ══════════════════════════════════════════════
+
+  # ── LM Studio（局域网 GPU 大机）──
+  # 跟 Hermes 已有相同，但补全 OpenClaw 别名
+  lmstudio:
+    label: "LM Studio (本地·局域网 GPU)"
+    type: local
+    base_url: http://host.docker.internal:1234/v1
+    api_key: lm-studio
+    timeout: 120
+    models:
+      # Hermes 命名
+      - qwen/qwen3-coder-30b
+      - google/gemma-4-12b-qat
+      - qwen2.5-vl-7b-instruct
+      # OpenClaw 命名
+      - local-model
+
+  # ── Ollama（本机，稳定可用）──
+  ollama:
+    label: "Ollama (本机)"
+    type: local
+    base_url: http://0.0.0.0:11434/v1
+    api_key: ollama
+    timeout: 60
+    models:
+      - qwen2.5-coder:1.5b      # Hermes 已有
+      # 可扩展更多 ollama 模型
+
+# ───────────────────────────────────────────────────
+# 模型层级（按能力分级）
+# ───────────────────────────────────────────────────
+tiers:
+  strong:        # 强推理
+    - glm-5.2
+    - deepseek-v4-pro
+    - kimi-k2.5
+    - kimi-k2.7-code
+    - kimi-k2.6
+    - claude-sonnet-4-5
+    - gpt-5.1
+    - qwen3.7-max
+    - ark-code-latest
+    - doubao-seed-2.0-pro
+    - doubao-seed-2.0-code
+
+  balanced:      # 均衡（默认）
+    - deepseek-v4-flash
+    - deepseek-v4-pro
+    - glm-5
+    - qwen3-plus
+    - qwen3.7-plus
+    - qwen3.6-plus
+    - gemini-3-flash
+    - minimaxai/minimax-m3
+    - LongCat-2.0
+    - mimo-v2.5-pro
+    - doubao-seed-2.0-lite
+    - doubao-seed-2.0-mini
+
+  fast:          # 快速/免费
+    - deepseek-v4-flash-free
+    - qwen3.6-plus-free
+    - nemotron-3-ultra-free
+    - nvidia/nemotron-3-ultra-550b-a55b
+    - mimo-v2.5-free
+    - minimax-m3-free
+    - minimaxai/minimax-m3
+    - north-mini-code-free
+    - mimo-v2.5
+
+  vision:        # 多模态/图片理解
+    - qwen2.5-vl-7b-instruct
+    - gemini-3-flash
+    - claude-sonnet-4-5
+    - gpt-5
+
+  local:         # 本地/离线
+    - qwen/qwen3-coder-30b
+    - google/gemma-4-12b-qat
+    - qwen2.5-vl-7b-instruct
+    - local-model
+    - qwen2.5-coder:1.5b
+
+# ───────────────────────────────────────────────────
+# 角色路由——按 agent 角色选默认模型
+# ───────────────────────────────────────────────────
+roles:
+  hermes:               # 编排者（强推理优先）
+    model: glm-5.2
+    upstream: opencode-go
+    fallback:
+      - model: deepseek-v4-flash-free
+        upstream: opencode-zen
+      - model: nvidia/nemotron-3-ultra-550b-a55b
+        upstream: nvidia-nim
+      - model: LongCat-2.0
+        upstream: longcat
+      - model: minimaxai/minimax-m3
+        upstream: nvidia-nim
+      - model: deepseek-v4-pro
+        upstream: deepseek-official
+      - model: ark-code-latest
+        upstream: volcengine
+
+  coder:                # 代码者（快速优先）
+    model: deepseek-v4-flash
+    upstream: opencode-go
+    fallback:
+      - model: deepseek-v4-flash-free
+        upstream: opencode-zen
+      - model: minimaxai/minimax-m3
+        upstream: nvidia-nim
+      - model: nvidia/nemotron-3-ultra-550b-a55b
+        upstream: nvidia-nim
+      - model: deepseek-v4-flash
+        upstream: deepseek-official
+      - model: ark-code-latest
+        upstream: volcengine
+
+  tester:               # 测试者（快速优先）
+    model: deepseek-v4-flash
+    upstream: opencode-go
+    fallback:
+      - model: deepseek-v4-flash-free
+        upstream: opencode-zen
+      - model: minimaxai/minimax-m3
+        upstream: nvidia-nim
+      - model: nvidia/nemotron-3-ultra-550b-a55b
+        upstream: nvidia-nim
+      - model: deepseek-v4-flash
+        upstream: deepseek-official
+      - model: ark-code-latest
+        upstream: volcengine
+
+  decision:             # 决策者（强推理优先）
+    model: glm-5.2
+    upstream: opencode-go
+    fallback:
+      - model: deepseek-v4-flash-free
+        upstream: opencode-zen
+      - model: nvidia/nemotron-3-ultra-550b-a55b
+        upstream: nvidia-nim
+      - model: LongCat-2.0
+        upstream: longcat
+      - model: deepseek-v4-pro
+        upstream: deepseek-official
+      - model: ark-code-latest
+        upstream: volcengine
+
+  vision:               # 图片理解（本地视觉优先）
+    model: qwen2.5-vl-7b-instruct
+    upstream: ollama
+    fallback:
+      - model: deepseek-v4-flash-free
+        upstream: opencode-zen
+      - model: minimaxai/minimax-m3
+        upstream: nvidia-nim
+      - model: deepseek-v4-flash
+        upstream: deepseek-official
+
+  compression:          # 压缩（免费快速优先）
+    model: deepseek-v4-flash
+    upstream: opencode-go
+    fallback:
+      - model: deepseek-v4-flash-free
+        upstream: opencode-zen
+      - model: minimaxai/minimax-m3
+        upstream: nvidia-nim
+      - model: deepseek-v4-flash
+        upstream: deepseek-official
+
+  openclaw-main:        # 给 OpenClaw 的主模型（均衡）
+    model: deepseek-v4-flash
+    upstream: opencode-go
+    fallback:
+      - model: deepseek-v4-flash-free
+        upstream: opencode-zen
+      - model: minimaxai/minimax-m3
+        upstream: nvidia-nim
+      - model: nvidia/nemotron-3-ultra-550b-a55b
+        upstream: nvidia-nim
+      - model: LongCat-2.0
+        upstream: longcat
+      - model: deepseek-v4-flash
+        upstream: deepseek-official
+      - model: ark-code-latest
+        upstream: volcengine
+      - model: qwen2.5-coder:1.5b
+        upstream: ollama
+
+  opencode-default:     # 给 OpenCode 的默认角色（均衡）
+    model: deepseek-v4-flash
+    upstream: opencode-go
+    fallback:
+      - model: deepseek-v4-flash-free
+        upstream: opencode-zen
+      - model: minimaxai/minimax-m3
+        upstream: nvidia-nim
+      - model: nvidia/nemotron-3-ultra-550b-a55b
+        upstream: nvidia-nim
+      - model: LongCat-2.0
+        upstream: longcat
+      - model: deepseek-v4-flash
+        upstream: deepseek-official
+      - model: ark-code-latest
+        upstream: volcengine
+
+  default:              # 通用默认（均衡，先免费后排付费）
+    model: deepseek-v4-flash
+    upstream: opencode-go
+    fallback:
+      - model: deepseek-v4-flash-free
+        upstream: opencode-zen
+      - model: minimaxai/minimax-m3
+        upstream: nvidia-nim
+      - model: nvidia/nemotron-3-ultra-550b-a55b
+        upstream: nvidia-nim
+      - model: LongCat-2.0
+        upstream: longcat
+      - model: deepseek-v4-flash
+        upstream: deepseek-official
+      - model: ark-code-latest
+        upstream: volcengine
+      - model: qwen2.5-coder:1.5b
+        upstream: ollama
+
+# ───────────────────────────────────────────────────
+# 自动升级规则
+# ───────────────────────────────────────────────────
+auto_upgrade:
+  deep_reasoning:
+    trigger_header: x-reasoning
+    trigger_value: deep
+    target_tier: strong
+  high_complexity:
+    trigger_header: x-task-complexity
+    trigger_value: high
+    target_tier: strong
+  vision_task:
+    trigger_header: x-content-type
+    trigger_value: image
+    target_tier: vision
+
+# ───────────────────────────────────────────────────
+# 日志
+# ───────────────────────────────────────────────────
+logging:
+  dir: /app/logs
+  usage_log: ai-model-gateway-usage.jsonl
+  access_log: ai-model-gateway.log
+  rotate_daily: true
+
+# ───────────────────────────────────────────────────
+# 健康检查
+# ───────────────────────────────────────────────────
+health_check:
+  interval: 300
+  timeout: 10
+  test_prompt: "Reply with: ok"
+
+# ───────────────────────────────────────────────────
+# Dashboard
+# ───────────────────────────────────────────────────
+dashboard:
+  enabled: true
+  refresh_interval: 5
